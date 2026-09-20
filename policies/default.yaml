@@ -1,0 +1,104 @@
+# Default capability policy for the agent sandbox. Deny-by-default: any
+# tool not listed here, or listed with allow: false, cannot be called.
+default: deny
+
+tools:
+  # --- read-only / content-ingestion tools -----------------------------
+  # These are NOT privileged sinks. Their output is always treated as
+  # untrusted and routed through the quarantined extractor before the
+  # agent's decision loop ever sees it (see agent_sandbox.agent).
+  fetch_url:
+    allow: true
+    sink: false
+    network:
+      hosts:
+        - docs.trusted.example
+        - wiki.trusted.example
+        - status.trusted.example
+        - cdn.trusted.example
+      schemes:
+        - https
+    max_calls: 10
+
+  read_email:
+    allow: true
+    sink: false
+    args:
+      msg_id:
+        type: string
+        pattern: "^[A-Za-z0-9_-]+$"
+        max_length: 64
+    max_calls: 20
+
+  read_file:
+    allow: true
+    sink: false
+    args:
+      path:
+        type: path_jail
+        roots:
+          - /workspace/inbox
+          - /workspace/docs
+    max_calls: 20
+
+  # --- privileged sinks --------------------------------------------------
+  # sink: true subjects every call to the taint-flow rule: an untrusted
+  # argument cannot reach these without an explicit declassification step.
+  send_email:
+    allow: true
+    sink: true
+    requires_approval: true
+    args:
+      to:
+        type: string
+        pattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        max_length: 128
+      subject:
+        type: string
+        max_length: 200
+      body:
+        type: string
+        max_length: 4000
+    max_calls: 5
+
+  http_post:
+    allow: true
+    sink: true
+    requires_approval: true
+    network:
+      hosts:
+        - api.trusted.example
+        - webhooks.trusted.example
+      schemes:
+        - https
+    max_calls: 5
+
+  delete_file:
+    allow: true
+    sink: true
+    requires_approval: true
+    args:
+      path:
+        type: path_jail
+        roots:
+          - /workspace/scratch
+    max_calls: 3
+
+  grant_admin:
+    allow: true
+    sink: true
+    requires_approval: true
+    args:
+      user:
+        type: string
+        pattern: "^[A-Za-z0-9_.-]+@corp\\.example$"
+        max_length: 128
+    max_calls: 1
+
+  # run_shell is not listed with allow: true anywhere -- it is denied by
+  # the default-deny rule regardless of what the agent decides to call.
+  run_shell:
+    allow: false
+
+budgets:
+  max_total_calls: 100

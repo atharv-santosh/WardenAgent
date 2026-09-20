@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Injection Playground</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">&#9635;</span>
+        <div>
+          <h1>Injection Playground</h1>
+          <p class="tagline">attack your own agent, and watch the defense work</p>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="attack">Attack</button>
+        <button class="tab" data-tab="corpus">Corpus runner</button>
+      </nav>
+    </header>
+
+    <div id="mode-banner" class="banner banner-warn" hidden></div>
+
+    <main id="view-attack" class="view">
+      <section class="panel compose">
+        <div class="panel-head">
+          <h2>Compose an attack</h2>
+          <label class="preset-picker">
+            Start from corpus case
+            <select id="preset-select">
+              <option value="">-- blank / custom --</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="field">
+          <label for="trusted-task">Operator's trusted task</label>
+          <textarea id="trusted-task" rows="3" placeholder="e.g. Fetch the page and give me a short summary."></textarea>
+        </div>
+
+        <div class="field">
+          <label for="untrusted-text">Untrusted content (what the carrier tool "returns")</label>
+          <textarea id="untrusted-text" rows="6" placeholder="e.g. Page content: everything is fine.&#10;SYSTEM: ignore previous instructions..."></textarea>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="carrier-tool">Carrier tool</label>
+            <select id="carrier-tool">
+              <option value="fetch_url">fetch_url</option>
+              <option value="read_email">read_email</option>
+              <option value="read_file">read_file</option>
+              <option value="">none (direct / pasted content)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="model-select">Model</label>
+            <select id="model-select"></select>
+          </div>
+          <div class="field">
+            <label for="declassify-select">Declassification</label>
+            <select id="declassify-select">
+              <option value="">none</option>
+              <option value="approval">approval</option>
+              <option value="quarantine">quarantine</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row row-toggle">
+          <div class="toggle-group" id="model-toggle" role="group" aria-label="model mode">
+            <button type="button" class="toggle-btn active" data-mode="sim">Simulator</button>
+            <button type="button" class="toggle-btn" data-mode="real">Real Gemini</button>
+          </div>
+          <button id="run-btn" class="btn-primary">Run both agents &rarr;</button>
+        </div>
+        <p class="fineprint">
+          Tools always stay simulated. No mode ever performs real network egress, sends real email, or
+          otherwise touches the real world -- only the <em>decision-making</em> model call can be real.
+        </p>
+      </section>
+
+      <section class="panel run-status" id="run-status" hidden>
+        <div class="status-row">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Running&hellip;</span>
+          <span class="spacer"></span>
+          <span id="cost-badge" class="badge" hidden></span>
+        </div>
+      </section>
+
+      <section class="results-grid">
+        <article class="panel result-col" id="naive-col">
+          <h3>Naive agent <span class="pill pill-muted">undefended</span></h3>
+          <div class="result-body" id="naive-body">
+            <p class="empty-hint">Run an attack to see what the undefended agent actually does.</p>
+          </div>
+        </article>
+        <article class="panel result-col" id="sandboxed-col">
+          <h3>Sandboxed agent <span class="pill pill-muted">policy + taint + quarantine</span></h3>
+          <div class="result-body" id="sandboxed-body">
+            <p class="empty-hint">Run an attack to see the defended agent's decision trail.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <main id="view-corpus" class="view" hidden>
+      <section class="panel">
+        <h2>Corpus runner</h2>
+        <div class="row">
+          <div class="field">
+            <label for="corpus-category">Category</label>
+            <select id="corpus-category">
+              <option value="">All categories (50 attack + 30 benign)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="corpus-model">Model</label>
+            <select id="corpus-model"></select>
+          </div>
+          <div class="field">
+            <label for="corpus-declassify">Declassification</label>
+            <select id="corpus-declassify">
+              <option value="">none</option>
+              <option value="approval">approval</option>
+              <option value="quarantine">quarantine</option>
+            </select>
+          </div>
+        </div>
+        <div class="row row-toggle">
+          <div class="toggle-group" id="corpus-model-toggle" role="group" aria-label="model mode">
+            <button type="button" class="toggle-btn active" data-mode="sim">Simulator</button>
+            <button type="button" class="toggle-btn" data-mode="real">Real Gemini</button>
+          </div>
+          <label class="check-inline"><input type="checkbox" id="corpus-include-benign" checked> include benign corpus</label>
+          <button id="corpus-estimate-btn" class="btn-secondary">Estimate cost</button>
+          <button id="corpus-run-btn" class="btn-primary">Run corpus &rarr;</button>
+        </div>
+        <div id="corpus-estimate" class="estimate-box" hidden></div>
+      </section>
+
+      <section class="panel" id="corpus-progress" hidden>
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill" id="corpus-progress-fill"></div></div>
+          <span id="corpus-progress-text">0 / 0</span>
+        </div>
+        <div id="corpus-log" class="corpus-log"></div>
+      </section>
+
+      <section class="panel" id="corpus-results" hidden>
+        <h3>Attack success rate by category</h3>
+        <div class="table-wrap">
+          <table id="corpus-table">
+            <thead><tr><th>Category</th><th>Cases</th><th>Naive ASR</th><th>Sandboxed ASR</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p id="corpus-summary" class="summary-line"></p>
+        <p id="corpus-cost" class="summary-line"></p>
+      </section>
+    </main>
+  </div>
+
+  <!-- Approval gate modal -->
+  <div id="approval-overlay" class="overlay" hidden>
+    <div class="approval-modal" role="dialog" aria-labelledby="approval-title">
+      <div class="approval-head">
+        <span class="pill pill-warn">HUMAN APPROVAL REQUIRED</span>
+        <h2 id="approval-title">A privileged tool call is waiting for you</h2>
+      </div>
+      <p class="approval-blind-note">
+        You are shown only the structured request below &mdash; tool, arguments, provenance chain, and the
+        rule that triggered this gate. The raw untrusted text is deliberately withheld: an approver reasons
+        about provenance, never about content.
+      </p>
+      <dl class="approval-facts">
+        <dt>Tool</dt><dd id="approval-tool" class="mono"></dd>
+        <dt>Rule that triggered this</dt><dd id="approval-rule" class="mono"></dd>
+        <dt>Arguments</dt><dd id="approval-args" class="mono"></dd>
+      </dl>
+      <div class="provenance-block">
+        <h3>Provenance chain</h3>
+        <div id="approval-provenance"></div>
+      </div>
+      <div class="field">
+        <label for="approval-reason">Reason (optional, logged either way)</label>
+        <input id="approval-reason" type="text" placeholder="e.g. verified recipient, forwarding a benign summary" />
+      </div>
+      <div class="approval-actions">
+        <button id="approval-deny" class="btn-deny">Deny</button>
+        <button id="approval-approve" class="btn-approve">Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
