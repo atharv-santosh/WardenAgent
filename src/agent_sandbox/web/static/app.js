@@ -79,16 +79,12 @@
     const banner = $("#mode-banner");
     banner.hidden = false;
     if (status.credentials_available) {
-      banner.className = "banner banner-safe";
-      banner.innerHTML = `<strong>Real Gemini available.</strong> Application Default Credentials found ` +
-        `(project <code>${escapeHtml(status.project)}</code>, location <code>${escapeHtml(status.location)}</code>). ` +
-        `Toggle "Real Gemini" to run the decision-making model live; tools stay simulated either way.`;
+      banner.className = "banner";
+      banner.innerHTML = `Gemini ready. Project <code>${escapeHtml(status.project)}</code>, ` +
+        `location <code>${escapeHtml(status.location)}</code>.`;
     } else {
-      banner.className = "banner banner-warn";
-      banner.innerHTML = `<strong>Simulator mode only.</strong> No usable Google Application Default ` +
-        `Credentials were found, so real-model runs are disabled here. The deterministic offline brain ` +
-        `still fully exercises policy, taint tracking, quarantine, and the approval gate. To enable real ` +
-        `Gemini: run <code>gcloud auth application-default login</code>, then reload this page.`;
+      banner.className = "banner";
+      banner.innerHTML = `Simulator only. Run <code>gcloud auth application-default login</code> to enable Gemini.`;
       $$(".toggle-btn[data-mode='real']").forEach((b) => { b.disabled = true; b.title = "no credentials available"; });
     }
   }
@@ -172,7 +168,7 @@
     const simulate = state.modelMode !== "real";
 
     if (!trusted_task.trim()) {
-      alert("Enter a trusted task first.");
+      alert("Enter a task first.");
       return;
     }
 
@@ -256,7 +252,7 @@
       // EventSource fires this on a normal server-closed stream too; only
       // treat it as a real problem if we never reached a terminal state.
       if ($("#status-text").textContent === "Running…") {
-        setStatus("error", "Connection to the run was lost.");
+        setStatus("error", "Connection lost.");
         $("#run-btn").disabled = false;
       }
       es.close();
@@ -291,7 +287,7 @@
     }
 
     if (data.digests && data.digests.length) {
-      parts.push(`<h3 style="margin-top:14px;">Quarantined extraction</h3>`);
+      parts.push(`<h3>Quarantine</h3>`);
       data.digests.forEach((d) => {
         parts.push(`<div class="code-block">summary: ${escapeHtml(d.summary) || "(empty)"}</div>`);
         if (d.entities && d.entities.length) {
@@ -303,7 +299,7 @@
     // Provenance chain, pulled from human_gate / error events in this phase's log.
     const chainRows = extractProvenance(data.events || []);
     if (chainRows.length) {
-      parts.push(`<h3 style="margin-top:14px;">Provenance chain</h3>`);
+      parts.push(`<h3>Provenance</h3>`);
       chainRows.forEach((chain) => { parts.push(renderChain(chain)); });
     }
 
@@ -415,7 +411,7 @@
     const simulate = state.corpusModelMode !== "real";
 
     if (!simulate) {
-      const proceed = confirm("This will make real, billed calls to Vertex AI Gemini. Continue?");
+      const proceed = confirm("Run billed Gemini calls?");
       if (!proceed) return;
     }
 
@@ -503,7 +499,7 @@
     if (u.total_calls) {
       $("#corpus-cost").textContent = `Usage: ${u.total_tokens} tokens across ${u.total_calls} live model calls ≈ ${fmtUsd(u.estimated_cost_usd)}`;
     } else {
-      $("#corpus-cost").textContent = "Usage: simulator mode, $0.00, 0 real model calls.";
+      $("#corpus-cost").textContent = "simulator, no model calls";
     }
   }
 
