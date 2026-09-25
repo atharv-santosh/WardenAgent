@@ -60,6 +60,16 @@ class RunResult:
     log: EventLog
 
 
+def _digest_index_for(value: str, digests: list[Digest], tag: str) -> int:
+    """Which digest a sink argument actually came from, so a multi-source run shows the approver the origin that produced the value rather than whichever source happened to be read first."""
+    for index, digest in enumerate(digests):
+        if tag == "untrusted_digest_entity" and any(value.strip() == e.strip() for e in digest.entities):
+            return index
+        if tag == "untrusted_digest_summary" and digest.summary and value in digest.summary:
+            return index
+    return 0
+
+
 def run_naive(
     scenario: Scenario,
     secrets: SecretStore | None = None,
@@ -186,7 +196,8 @@ def run_sandboxed(
                     if tag == "trusted":
                         tainted_args[name] = trusted.derive(value, step=f"argument '{name}' from trusted directive")
                     elif tag in ("untrusted_digest_summary", "untrusted_digest_entity") and tainted_digests:
-                        tainted_args[name] = tainted_digests[0].derive(
+                        index = _digest_index_for(value, digests, tag)
+                        tainted_args[name] = tainted_digests[index].derive(
                             value, step=f"substituted into '{name}' from quarantine digest ({tag})"
                         )
                     else:

@@ -8,6 +8,7 @@ from agent_sandbox.agent import RunResult, run_naive, run_sandboxed
 from agent_sandbox.approval import auto_approve, auto_deny
 from agent_sandbox.live_replay import list_fixtures, load_fixture, replay_naive_decide_fn, replay_sandboxed_fns
 from agent_sandbox.policy import Policy, PolicyEngine
+from agent_sandbox.redteam.adaptive import ADAPTIVE_CASES
 from agent_sandbox.redteam.corpus import ATTACK_CASES, BENIGN_CASES
 from agent_sandbox.redteam.runner import CategoryStats, FP_CONFIGURATIONS, MeasurementReport
 
@@ -17,7 +18,7 @@ def build_report_from_fixtures(
 ) -> tuple[dict[str, MeasurementReport], list[RunResult]]:
     """Replay every fixture in ``fixtures_dir`` and rebuild the same ``{config_name: MeasurementReport}`` shape :func:`agent_sandbox.redteam."""
     policy = Policy.from_file(policy_path)
-    all_scenarios = {s.id: s for s in [*ATTACK_CASES, *BENIGN_CASES]}
+    all_scenarios = {s.id: s for s in [*ATTACK_CASES, *BENIGN_CASES, *ADAPTIVE_CASES]}
 
     reports = {name: MeasurementReport(declassify_via=value) for name, value in FP_CONFIGURATIONS}
     naive_results: list[RunResult] = []

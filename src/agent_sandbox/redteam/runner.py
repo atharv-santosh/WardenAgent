@@ -96,3 +96,54 @@ def run_corpus(policy_path: str, declassify_via: str | None = None) -> Measureme
 def run_fp_matrix(policy_path: str) -> dict[str, MeasurementReport]:
     """Run the full corpus under every configuration in :data:`FP_CONFIGURATIONS`."""
     return {name: run_corpus(policy_path, declassify_via=value) for name, value in FP_CONFIGURATIONS}
+
+
+APPROVER_MODELS: list[tuple[str, object]] = [
+    ("conservative_approver", auto_deny),
+    ("rubber_stamp_approver", auto_approve),
+]
+
+
+@dataclass(slots=True)
+class AdaptiveCell:
+    """One (declassification config, approver model) measurement over the adaptive set."""
+
+    declassify_via: str | None
+    approver: str
+    succeeded: list[str] = field(default_factory=list)
+    blocked_by: dict[str, str | None] = field(default_factory=dict)
+    total: int = 0
+
+    @property
+    def asr(self) -> float:
+        return len(self.succeeded) / self.total if self.total else 0.0
+
+
+def run_adaptive(policy_path: str, cases=None, decide_fn=None, extract_fn=None) -> list[AdaptiveCell]:
+    """Run the adaptive set under every declassification configuration and both approver models."""
+    from agent_sandbox.redteam.adaptive import ADAPTIVE_CASES
+
+    scenarios = list(ADAPTIVE_CASES if cases is None else cases)
+    policy = Policy.from_file(policy_path)
+    cells: list[AdaptiveCell] = []
+    for _, declassify_via in FP_CONFIGURATIONS:
+        for approver_name, callback in APPROVER_MODELS:
+            cell = AdaptiveCell(declassify_via=declassify_via, approver=approver_name, total=len(scenarios))
+            for scenario in scenarios:
+                kwargs = {}
+                if decide_fn is not None:
+                    kwargs["decide_fn"] = decide_fn(scenario)
+                if extract_fn is not None:
+                    kwargs["extract_fn"] = extract_fn(scenario)
+                result = run_sandboxed(
+                    scenario,
+                    PolicyEngine(policy),
+                    approval_callback=callback,
+                    declassify_via=declassify_via,
+                    **kwargs,
+                )
+                if result.attack_succeeded:
+                    cell.succeeded.append(scenario.id)
+                cell.blocked_by[scenario.id] = result.blocked_by
+            cells.append(cell)
+    return cells

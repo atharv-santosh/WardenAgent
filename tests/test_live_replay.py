@@ -10,13 +10,14 @@ from agent_sandbox.agent import run_naive, run_sandboxed
 from agent_sandbox.approval import auto_approve, auto_deny
 from agent_sandbox.live_replay import list_fixtures, load_fixture, replay_naive_decide_fn, replay_sandboxed_fns
 from agent_sandbox.policy import Policy, PolicyEngine
+from agent_sandbox.redteam.adaptive import ADAPTIVE_CASES
 from agent_sandbox.redteam.corpus import ATTACK_CASES, BENIGN_CASES
 from agent_sandbox.redteam.runner import FP_CONFIGURATIONS
 
 FIXTURES_ROOT = Path(__file__).parent / "fixtures" / "gemini"
 DEFAULT_POLICY = str(Path(__file__).resolve().parents[1] / "policies" / "default.yaml")
 
-ALL_SCENARIOS = {s.id: s for s in [*ATTACK_CASES, *BENIGN_CASES]}
+ALL_SCENARIOS = {s.id: s for s in [*ATTACK_CASES, *BENIGN_CASES, *ADAPTIVE_CASES]}
 
 
 def _fixture_dirs() -> list[Path]:

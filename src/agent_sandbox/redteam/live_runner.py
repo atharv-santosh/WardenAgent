@@ -55,12 +55,13 @@ def run_live_corpus(
     limit: int | None = None,
     include_benign: bool = True,
     skip_existing_fixtures: bool = False,
+    attack_cases: list[Scenario] | None = None,
 ) -> tuple[dict[str, MeasurementReport], list[RunResult], LiveUsage]:
     """Run the attack corpus (and, unless ``include_benign`` is False, the benign corpus) against a real Gemini model."""
     client = build_client()
     policy = Policy.from_file(policy_path)
 
-    attack = list(ATTACK_CASES)
+    attack = list(ATTACK_CASES if attack_cases is None else attack_cases)
     benign = list(BENIGN_CASES) if include_benign else []
     if limit is not None:
         attack = attack[:limit]

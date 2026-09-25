@@ -14,7 +14,7 @@ from agent_sandbox.agent import run_naive, run_sandboxed
 from agent_sandbox.approval import auto_deny
 from agent_sandbox.policy import Policy, PolicyEngine, PolicyError
 from agent_sandbox.redteam.corpus import ATTACK_CASES, BENIGN_CASES
-from agent_sandbox.redteam.runner import FP_CONFIGURATIONS, run_corpus, run_fp_matrix
+from agent_sandbox.redteam.runner import FP_CONFIGURATIONS, run_adaptive, run_corpus, run_fp_matrix
 from agent_sandbox.report import generate_html_report
 
 console = Console()
@@ -179,6 +179,43 @@ def redteam(policy_path: str, declassify_via: str, fp_matrix: bool, json_out: st
         console.print(f"wrote {json_out}")
 
 
+@main.command("adaptive")
+@click.option("--policy-path", default=DEFAULT_POLICY, show_default=True)
+@click.option("--json-out", type=click.Path(), default=None, help="Write raw JSON results to this path.")
+def adaptive_cmd(policy_path: str, json_out: str | None) -> None:
+    """Run the adaptive attack set: attacks written against this codebase's own defenses, under every declassification configuration and both approver models."""
+    cells = run_adaptive(policy_path)
+
+    table = Table(title="Adaptive attack set: success rate by declassification config and approver model")
+    table.add_column("Declassify via")
+    table.add_column("Approver")
+    table.add_column("ASR", justify="right")
+    table.add_column("Succeeded", justify="left")
+    for cell in cells:
+        table.add_row(
+            str(cell.declassify_via),
+            cell.approver,
+            f"{cell.asr:.1%} ({len(cell.succeeded)}/{cell.total})",
+            ", ".join(cell.succeeded) or "-",
+        )
+    console.print(table)
+
+    if json_out:
+        payload = [
+            {
+                "declassify_via": c.declassify_via,
+                "approver": c.approver,
+                "asr": c.asr,
+                "succeeded": c.succeeded,
+                "blocked_by": c.blocked_by,
+                "total": c.total,
+            }
+            for c in cells
+        ]
+        Path(json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        console.print(f"wrote {json_out}")
+
+
 @main.command("report")
 @click.option("--policy-path", default=DEFAULT_POLICY, show_default=True)
 @click.option("--out", type=click.Path(), default="redteam-report.html", show_default=True)
@@ -200,6 +237,7 @@ def report_cmd(policy_path: str, out: str) -> None:
 @click.option("--model", default="gemini-2.5-flash-lite", show_default=True, help="Vertex AI Gemini model id.")
 @click.option("--limit", type=int, default=None, help="Only run the first N attack (and N//2 benign) cases -- for a cheap smoke test.")
 @click.option("--no-benign", is_flag=True, help="Skip the benign corpus (attack corpus only).")
+@click.option("--adaptive", is_flag=True, help="Run the adaptive attack set instead of the standard attack corpus.")
 @click.option("--fixtures-dir", type=click.Path(), default=None, help="Write one trajectory fixture JSON per scenario here.")
 @click.option("--json-out", type=click.Path(), default=None, help="Write raw JSON results to this path.")
 @click.option(
@@ -213,12 +251,14 @@ def redteam_live(
     model: str,
     limit: int | None,
     no_benign: bool,
+    adaptive: bool,
     fixtures_dir: str | None,
     json_out: str | None,
     yes_spend_money: bool,
 ) -> None:
     """Run the attack (+ benign) corpus against a REAL Gemini model over Vertex AI."""
     from agent_sandbox.gemini_adapter import GeminiUnavailable, credentials_available
+    from agent_sandbox.redteam.adaptive import ADAPTIVE_CASES
     from agent_sandbox.redteam.live_runner import run_live_corpus
 
     if not credentials_available():
@@ -235,6 +275,7 @@ def redteam_live(
             fixtures_dir=fixtures_dir,
             limit=limit,
             include_benign=not no_benign,
+            attack_cases=list(ADAPTIVE_CASES) if adaptive else None,
         )
     except GeminiUnavailable as exc:
         console.print(f"[bold red]Gemini unavailable:[/bold red] {exc}")
