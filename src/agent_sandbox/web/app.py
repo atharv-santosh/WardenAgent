@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from agent_sandbox.redteam.corpus import ATTACK_CASES, BENIGN_CASES
 from agent_sandbox.web import runs
@@ -20,7 +20,13 @@ from agent_sandbox.web.pricing import DEFAULT_MODEL, SUPPORTED_MODELS, rough_pre
 _HERE = Path(__file__).resolve().parent
 
 
-class PlaygroundRequest(BaseModel):
+class StrictRequest(BaseModel):
+    """Base for every request body: an unknown or misspelled field is a 422, never a silently-dropped field that leaves a default in place (``simulate=True`` quietly running the simulator instead of the real model, for instance)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PlaygroundRequest(StrictRequest):
     trusted_task: str
     untrusted_text: str = ""
     carrier_tool: str | None = None
@@ -29,21 +35,21 @@ class PlaygroundRequest(BaseModel):
     declassify_via: str | None = None
 
 
-class ApprovalDecisionRequest(BaseModel):
+class ApprovalDecisionRequest(StrictRequest):
     approval_id: str
     approved: bool
     reason: str = ""
     decided_by: str = "operator"
 
 
-class CorpusEstimateRequest(BaseModel):
+class CorpusEstimateRequest(StrictRequest):
     category: str | None = None
     model: str = DEFAULT_MODEL
     include_benign: bool = True
     limit: int | None = None
 
 
-class CorpusRunRequest(BaseModel):
+class CorpusRunRequest(StrictRequest):
     category: str | None = None
     model: str = DEFAULT_MODEL
     simulate: bool = True

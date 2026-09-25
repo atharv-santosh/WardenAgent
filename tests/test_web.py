@@ -331,3 +331,33 @@ def test_corpus_run_end_to_end(client: TestClient) -> None:
     assert done["overall_naive_asr"] == 1.0
     assert done["overall_sandboxed_asr"] == 0.0
     assert done["usage"]["total_calls"] == 0
+
+
+def test_unknown_field_in_a_playground_request_is_rejected(client: TestClient) -> None:
+    """A misspelled field used to be dropped silently, leaving its default in place -- so a request meaning to use the real model quietly ran the simulator."""
+    response = client.post(
+        "/api/playground/run",
+        json={"trusted_task": "summarize this", "simulated": False},
+    )
+    assert response.status_code == 422
+    assert "simulated" in response.text
+
+
+def test_unknown_field_is_rejected_on_every_request_model(client: TestClient) -> None:
+    for path, body in [
+        ("/api/playground/run", {"trusted_task": "t"}),
+        ("/api/playground/nonexistent-run/approve", {"approval_id": "a", "approved": True}),
+        ("/api/corpus/estimate", {}),
+        ("/api/corpus/run", {}),
+    ]:
+        response = client.post(path, json={**body, "not_a_real_field": 1})
+        assert response.status_code == 422, f"{path} accepted an unknown field"
+
+
+def test_valid_playground_request_still_works(client: TestClient) -> None:
+    response = client.post(
+        "/api/playground/run",
+        json={"trusted_task": "summarize this", "simulate": True},
+    )
+    assert response.status_code == 200
+    assert "run_id" in response.json()
