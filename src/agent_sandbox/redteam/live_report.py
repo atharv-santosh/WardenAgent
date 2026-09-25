@@ -63,3 +63,23 @@ def build_report_from_fixtures(
             report.sandboxed_results.append(result)
 
     return reports, naive_results
+
+
+def build_adaptive_cells_from_fixtures(fixtures_dir: str | Path, policy_path: str):
+    """Replay adaptive-set fixtures through :func:`agent_sandbox.redteam.runner.run_adaptive`, so the live grid is measured by the same code as the offline one."""
+    from agent_sandbox.redteam.adaptive import ADAPTIVE_CASES
+    from agent_sandbox.redteam.runner import run_adaptive
+
+    fixtures = {load_fixture(p)["scenario_id"]: load_fixture(p) for p in list_fixtures(fixtures_dir)}
+    cases = [s for s in ADAPTIVE_CASES if s.id in fixtures]
+    naive: dict[str, bool] = {}
+    for scenario in cases:
+        result = run_naive(scenario, decide_fn=replay_naive_decide_fn(fixtures[scenario.id]))
+        naive[scenario.id] = result.attack_succeeded
+    cells = run_adaptive(
+        policy_path,
+        cases=cases,
+        decide_fn=lambda s: replay_sandboxed_fns(fixtures[s.id])[0],
+        extract_fn=lambda s: replay_sandboxed_fns(fixtures[s.id])[1],
+    )
+    return cells, naive

@@ -203,9 +203,12 @@ missing the one auto-clear rule that exists specifically for this case.
 Net effect: the real quarantine-mode FP rate is 33.3%, identical to
 no-declassification-at-all, instead of the simulator's 23.3%. **This was
 left as measured, not patched to get a better number** -- see
-`tests/test_gemini_adapter.py::test_summary_checked_before_entity_is_a_known_ordering_limitation`,
-which pins the current (summary-first) behavior down explicitly so a
-future fix is a deliberate choice. It is a genuine limitation of
+`tests/test_gemini_adapter.py`, which pinned the summary-first behavior
+down explicitly so a future fix would be a deliberate choice. (That fix
+happened on 2026-09-25; the pinning test was replaced by one asserting the
+new behavior, and the second-pass section at the end of this file has the
+before and after numbers. This paragraph is left as written, because this
+file is a build log in the order things happened.) It is a genuine limitation of
 reimplementing a simulator-specific mechanism (a placeholder only the
 operator can write) against a real model that free-forms its own tool
 arguments -- worth calling out in `THREAT-MODEL.md` as scoped to the
