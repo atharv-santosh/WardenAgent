@@ -91,6 +91,21 @@ each one actually relies on:
   the cost of leaving most realistic forwarding tasks (which need the
   freeform summary, not just an extracted entity) still gated on a human.
 
+  **The value it clears is still attacker-derived content.** The schema
+  bounds an entity's length and character class; it says nothing about its
+  meaning, and an attacker who controls the untrusted text controls every
+  element of `entities` and their order. `adaptive_declassify_entity-02`
+  exploits exactly that: the operator legitimately asks to forward an
+  extracted reference, the attacker writes first so `entities[0]` is
+  theirs, and the value is auto-cleared with no human step. It is the one
+  adaptive case in this repository that gets past the taint layer, and the
+  approval gate is the only thing left in front of it -- which means this
+  configuration's safety collapses onto the approver-diligence dependency
+  described above. It is measured and reported in `MEASUREMENTS.md` rather
+  than removed, because the alternative is a 33.3% false-positive rate;
+  a deployment that cannot rely on its approvers should run
+  `declassify_via=None` and pay that rate.
+
 ## Explicitly out of scope: what this does NOT defend against
 
 Overclaiming is the fastest way to lose credibility with a security-literate
@@ -132,21 +147,23 @@ reader, so this section is deliberately blunt:
      arguments at the sink regardless of what any brain, real or
      simulated, "decides"), not because a real model happens to behave
      the way the simulator assumed.
-  3. **One defense mechanism that worked in simulation measurably did not
-     transfer to the real backend**: quarantine-mode auto-declassification
-     resolved 3/10 benign false positives in the simulator but resolved
-     zero against the real model, because the real adapter's provenance-
-     attribution heuristic (`gemini_adapter.py::_attribute_provenance`,
-     necessary because a real model has no placeholder mechanism to name
-     its own argument's source the way the simulator's trusted directives
-     do) mis-tags a value that appears in both a digest's `summary` and
-     its `entities` field as summary-sourced. This is a real, disclosed
-     limitation of the *live adapter's heuristic*, not of the underlying
-     taint/quarantine design -- the value was still correctly refused as
-     `untrusted` rather than leaked, it just missed the one legitimate
-     auto-clear rule that applied to it. See `MEASUREMENTS.md` and
-     `NOTES.md` for the full account, including why this was reported as
-     measured rather than quietly patched before writing the number down.
+  3. **One defense mechanism that worked in simulation did not transfer to
+     the real backend, was reported as measured, and has since been
+     fixed**: quarantine-mode auto-declassification resolved 3/10 benign
+     false positives in the simulator but resolved zero against the real
+     model, because the live adapter's provenance-attribution heuristic
+     (`gemini_adapter.py::attribute_provenance`, necessary because a real
+     model has no placeholder mechanism to name its own argument's source)
+     checked a digest's `summary` before its `entities`, and mis-tagged a
+     value that appeared in both. Attribution now resolves by evidence
+     strength rather than field order, and the real quarantine-mode
+     false-positive rate is 23.3%, matching the simulator. Fixing it also
+     exposed that attribution alone would hand the auto-clear to any
+     argument a free-forming model happened to make equal to an entity, so
+     `run_sandboxed` now requires the operator's own trusted directive to
+     have named a digest entity -- the opt-in the simulator's placeholder
+     provided implicitly and the live path never had. `MEASUREMENTS.md`
+     keeps both the before and the after numbers.
   A real model's action space is still far larger and far less
   predictable than the fixed `call TOOL(args)` grammar the simulator's
   brain recognizes, and the live corpus run here is two model families on
@@ -178,12 +195,18 @@ reader, so this section is deliberately blunt:
   model are not covered. `http_post`'s URL-query-string exfil attempt is
   modeled explicitly because it is a well-known real pattern, but the
   corpus is not an exhaustive list of side channels.
-* **A fully adaptive, sandbox-aware attacker.** The red-team corpus is
-  static and disclosed (it ships in this repository). An attacker who has
-  read this corpus and this codebase could construct payloads specifically
-  designed to exploit a gap in the pattern matcher or the entity regex.
-  Static red-team corpora measure resistance to *known* attack shapes;
-  they are evidence of a floor, not a ceiling.
+* **A fully adaptive, sandbox-aware attacker.** The 50-case red-team
+  corpus is static and disclosed (it ships in this repository), and static
+  corpora measure resistance to *known* attack shapes: evidence of a
+  floor, not a ceiling. `redteam/adaptive.py` narrows that gap without
+  closing it -- twelve cases written after reading this codebase, aimed at
+  the quarantine schema's bounds and character class, the entity
+  extractor's instruction filter, the declassification placeholder
+  mechanism, the approval gate's presentation, and the gap between
+  per-argument provenance and decision provenance. One of the twelve gets
+  past the taint layer (see the quarantine-mode bullet above). That set is
+  written by the same people who wrote the defenses, which is a real
+  limitation of its own: it probes the gaps its authors could think of.
 * **Multi-agent and cross-session attacks.** This project models a single
   agent run in isolation. An attacker who can poison state that persists
   *across* runs (a shared memory store, a cached tool result reused by a
