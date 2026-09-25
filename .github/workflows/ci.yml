@@ -26,9 +26,12 @@ jobs:
         run: |
           uv venv
           source .venv/bin/activate
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev,web]"
 
-      - name: Run test suite
+      - name: Run test suite with no credentials configured
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ""
+          GOOGLE_CLOUD_PROJECT: ""
         run: |
           source .venv/bin/activate
           pytest -q
@@ -43,6 +46,11 @@ jobs:
           source .venv/bin/activate
           sbx redteam --fp-matrix --json-out redteam-results.json
 
+      - name: Run the adaptive attack set
+        run: |
+          source .venv/bin/activate
+          sbx adaptive --json-out adaptive-results.json
+
       - name: Generate HTML report
         run: |
           source .venv/bin/activate
@@ -54,4 +62,5 @@ jobs:
           name: redteam-results-py${{ matrix.python-version }}
           path: |
             redteam-results.json
+            adaptive-results.json
             redteam-report.html
