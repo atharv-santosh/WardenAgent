@@ -253,18 +253,24 @@ def make_live_naive_decide(
     return decide
 
 
-def _attribute_provenance(value: str, trusted_text: str, digests: list[Digest]) -> str:
-    """Heuristic post-hoc provenance tag for one real-model tool-call argument."""
+def attribute_provenance(value: str, trusted_text: str, digests: list[Digest]) -> str:
+    """Post-hoc provenance tag for one real-model tool-call argument, resolved by evidence strength rather than by field order."""
     if not value:
         return "trusted"
     if value in trusted_text:
         return "trusted"
+    needle = value.strip()
+    for digest in digests:
+        for entity in digest.entities:
+            if needle and needle == entity.strip():
+                return "untrusted_digest_entity"
     for digest in digests:
         if digest.summary and value in digest.summary:
             return "untrusted_digest_summary"
+    for digest in digests:
         for entity in digest.entities:
-            if value == entity or (entity and (value in entity or entity in value)):
-                return "untrusted_digest_entity"
+            if entity and needle and (needle in entity or entity in needle):
+                return "untrusted_digest_summary"
     return "untrusted"
 
 
@@ -309,7 +315,7 @@ def make_live_sandboxed_decide(
             return None
         name, args = call
         str_args = {k: str(v) for k, v in args.items()}
-        arg_sources = {k: _attribute_provenance(v, trusted_text, digests) for k, v in str_args.items()}
+        arg_sources = {k: attribute_provenance(v, trusted_text, digests) for k, v in str_args.items()}
         record["arg_sources"] = arg_sources
         if recorder is not None:
             recorder.add(record)

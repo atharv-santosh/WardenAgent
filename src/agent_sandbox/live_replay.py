@@ -1,4 +1,10 @@
-"""Offline replay of recorded live-Gemini trajectory fixtures."""
+"""Offline replay of recorded live-Gemini trajectory fixtures.
+
+A fixture records the model's own outputs (digests, function calls). Per-argument
+provenance is this project's code, not the model's, so replay recomputes it with
+:func:`agent_sandbox.gemini_adapter.attribute_provenance` rather than reusing the
+tag recorded at capture time.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent_sandbox.gemini_adapter import attribute_provenance
 from agent_sandbox.llm_sim import ToolCallIntent
 from agent_sandbox.quarantine import Digest, QuarantineViolation, validate_digest
 
@@ -53,8 +60,19 @@ def replay_sandboxed_fns(fixture: dict[str, Any]):
     decide_record = decide_records[0]
     intent = _intent_from_function_call(decide_record, source="trusted")
 
-    def _decide(_trusted_text: str, _digests: list[Digest]) -> ToolCallIntent | None:
-        return intent
+    def _decide(trusted_text: str, digests: list[Digest]) -> ToolCallIntent | None:
+        if intent is None:
+            return None
+        return ToolCallIntent(
+            tool=intent.tool,
+            args=dict(intent.args),
+            triggered_by=intent.triggered_by,
+            source=intent.source,
+            arg_sources={
+                name: attribute_provenance(value, trusted_text, digests)
+                for name, value in intent.args.items()
+            },
+        )
 
     extract_iter = iter(extract_records)
     seen: dict[str, Digest] = {}

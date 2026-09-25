@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from agent_sandbox.approval import ApprovalCallback, ApprovalGate, auto_deny
 from agent_sandbox.events import EventLog
-from agent_sandbox.llm_sim import ToolCallIntent, naive_decide, sandboxed_decide
+from agent_sandbox.llm_sim import DIGEST_ENTITY_PLACEHOLDER, ToolCallIntent, naive_decide, sandboxed_decide
 from agent_sandbox.policy import PolicyEngine
 from agent_sandbox.quarantine import Digest, QuarantineViolation, extract as quarantine_extract
 from agent_sandbox.secrets import SecretLeakage, SecretStore
@@ -207,11 +207,14 @@ def run_sandboxed(
                         if approval.approved:
                             tainted_args[name] = tainted.declassify(reason=approval.reason, approved_by=approval.decided_by)
                 elif declassify_via == "quarantine":
+                    operator_named_entity = DIGEST_ENTITY_PLACEHOLDER in trusted.value
                     for name, tainted in list(tainted_args.items()):
+                        if not operator_named_entity:
+                            continue
                         if intent.source_of(name) == "untrusted_digest_entity" and tainted.label == "untrusted":
                             tainted_args[name] = tainted.declassify(
-                                reason="schema-validated entity field from the quarantined extractor "
-                                "(bounded length, instruction-shaped content already stripped)",
+                                reason="schema-validated entity field from the quarantined extractor, "
+                                "named as an argument source by the operator's own trusted directive",
                                 approved_by="quarantine:schema_validated",
                             )
                             log.emit(

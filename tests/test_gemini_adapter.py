@@ -9,7 +9,7 @@ import pytest
 from agent_sandbox.gemini_adapter import (
     DEFAULT_LOCATION,
     DEFAULT_PROJECT,
-    _attribute_provenance,
+    attribute_provenance,
     credentials_available,
     resolve_location,
     resolve_project,
@@ -36,36 +36,50 @@ def test_credentials_available_never_raises() -> None:
     assert isinstance(credentials_available(), bool)
 
 
-def test_attribute_provenance_matches_trusted_text() -> None:
-    assert _attribute_provenance("ops@corp.example", "send it to ops@corp.example", []) == "trusted"
+def testattribute_provenance_matches_trusted_text() -> None:
+    assert attribute_provenance("ops@corp.example", "send it to ops@corp.example", []) == "trusted"
 
 
-def test_attribute_provenance_matches_digest_summary() -> None:
+def testattribute_provenance_matches_digest_summary() -> None:
     digest = Digest(summary="The vendor confirmed the renewal date.", entities=[])
-    result = _attribute_provenance("The vendor confirmed the renewal date.", "unrelated trusted text", [digest])
+    result = attribute_provenance("The vendor confirmed the renewal date.", "unrelated trusted text", [digest])
     assert result == "untrusted_digest_summary"
 
 
-def test_attribute_provenance_matches_digest_entity() -> None:
+def testattribute_provenance_matches_digest_entity() -> None:
     digest = Digest(summary="unrelated", entities=["vendor.contact@partner.example"])
-    result = _attribute_provenance("vendor.contact@partner.example", "unrelated trusted text", [digest])
+    result = attribute_provenance("vendor.contact@partner.example", "unrelated trusted text", [digest])
     assert result == "untrusted_digest_entity"
 
 
-def test_attribute_provenance_defaults_untrusted_fail_closed() -> None:
-    result = _attribute_provenance("something-the-model-invented", "trusted text here", [])
+def testattribute_provenance_defaults_untrusted_fail_closed() -> None:
+    result = attribute_provenance("something-the-model-invented", "trusted text here", [])
     assert result == "untrusted"
 
 
-def test_attribute_provenance_empty_value_is_trusted() -> None:
-    assert _attribute_provenance("", "anything", []) == "trusted"
+def testattribute_provenance_empty_value_is_trusted() -> None:
+    assert attribute_provenance("", "anything", []) == "trusted"
 
 
-def test_summary_checked_before_entity_is_a_known_ordering_limitation() -> None:
-    """Documents a real limitation found while measuring the live corpus (see NOTES.md): when a value appears in BOTH a digest's summary and its entities list, :func:`_attribute_provenance` tags it."""
+def test_exact_entity_match_wins_over_a_summary_substring() -> None:
+    """The fix for NOTES.md Finding 2: a value appearing in BOTH a digest's summary and its entities list is attributed to the entity, because an exact match against a schema-validated entity is stronger evidence than being a substring of freeform prose."""
     digest = Digest(summary="Contact vendor.contact@partner.example for renewals.", entities=["vendor.contact@partner.example"])
-    result = _attribute_provenance("vendor.contact@partner.example", "trusted text", [digest])
-    assert result == "untrusted_digest_summary"
+    result = attribute_provenance("vendor.contact@partner.example", "trusted text", [digest])
+    assert result == "untrusted_digest_entity"
+
+
+def test_entity_match_is_exact_not_substring() -> None:
+    """Entity attribution is the only tag quarantine mode auto-declassifies, so a value that merely overlaps an entity falls back to the non-clearable tag."""
+    digest = Digest(summary="unrelated prose", entities=["REF-2291"])
+    assert attribute_provenance("REF-2291 and also attacker@evil.example", "trusted text", [digest]) == (
+        "untrusted_digest_summary"
+    )
+    assert attribute_provenance("REF-22", "trusted text", [digest]) == "untrusted_digest_summary"
+
+
+def test_entity_match_tolerates_surrounding_whitespace() -> None:
+    digest = Digest(summary="unrelated prose", entities=["REF-2291"])
+    assert attribute_provenance(" REF-2291 ", "trusted text", [digest]) == "untrusted_digest_entity"
 
 
 @pytest.mark.skipif(

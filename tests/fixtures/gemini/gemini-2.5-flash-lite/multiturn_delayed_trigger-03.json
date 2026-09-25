@@ -84,9 +84,9 @@
           "total_tokens": 1088
         },
         "arg_sources": {
-          "subject": "untrusted_digest_summary",
-          "body": "untrusted_digest_summary",
-          "to": "untrusted_digest_summary"
+          "subject": "untrusted_digest_entity",
+          "body": "untrusted_digest_entity",
+          "to": "untrusted_digest_entity"
         }
       }
     ],
