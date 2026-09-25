@@ -109,14 +109,28 @@ instead of one, scoped very differently:
   2. Every sentence contributing to `entities` already passed through the
      same instruction-stripping pass that `summary` did -- so an entity
      can't itself be an un-stripped directive.
-  3. The eligibility check in `agent_sandbox.agent.run_sandboxed` keys off
-     `ToolCallIntent.source_of(arg) == "untrusted_digest_entity"`, a tag
-     that `agent_sandbox.llm_sim._apply_digest_placeholders` can only ever
-     produce by substituting into a placeholder written in *trusted* text.
-     A directive found inside untrusted content (an attacker's own
-     payload) is tagged plain `"untrusted"`, which this eligibility check
-     explicitly excludes -- see
-     `tests/test_redteam.py::test_declassification_bypass_probes_are_blocked_under_every_configuration`.
+  3. The eligibility check in `agent_sandbox.agent.run_sandboxed` requires
+     both that the argument is tagged `"untrusted_digest_entity"` and that
+     the operator's own trusted task contains the `{{DIGEST_ENTITY}}`
+     placeholder. A directive found inside untrusted content (an
+     attacker's own payload) is tagged plain `"untrusted"`, which the tag
+     check excludes; a real model that free-forms an argument happening to
+     equal an entity is excluded by the opt-in check, which nothing an
+     attacker writes can satisfy. See
+     `tests/test_redteam.py::test_declassification_bypass_probes_are_blocked_under_every_configuration`
+     and
+     `tests/test_agent.py::test_quarantine_autoclear_requires_the_operator_to_have_named_a_digest_entity`.
+
+  What these three properties do **not** give is any guarantee about an
+  entity's *meaning*. Every element of `entities` is derived from attacker-
+  controlled text, and their order follows the order of that text, so an
+  attacker who knows the operator will forward "the extracted reference"
+  can decide what that reference is. `redteam/adaptive.py`'s
+  `adaptive_declassify_entity-02` does exactly that and is the one adaptive
+  case that reaches the approval gate. Keeping this path is a deliberate
+  trade of one defense layer for a 10-point reduction in false positives;
+  `THREAT-MODEL.md` says so, and a deployment that cannot rely on its
+  approvers should run `declassify_via=None`.
 
 `summary` is deliberately never eligible for automatic clearance: it is
 long, freeform, and only capped in *length*, not in what kind of content
@@ -146,6 +160,15 @@ who can observe the sandbox's behavior could:
   hostname, not the content served, and this project does not model
   supply-chain compromise of an allowlisted host.
 
+`redteam/adaptive.py` turns the first two of these from speculation into
+measurement: twelve cases written against the quarantine schema, the entity
+extractor's filter, the placeholder mechanism, the approval gate's
+presentation, and the gap between per-argument and per-decision provenance.
+One of the twelve succeeds. The rest of that list stays speculative, and
+the set shares a weakness with the corpus it supplements: it was written by
+the same people who wrote the defenses, so it probes the gaps its authors
+could think of.
+
 These gaps are why this project positions itself as *the policy layer*, not
 *a guarantee of safety* -- see `THREAT-MODEL.md` for the full, explicit list
 of what is and is not defended against.
@@ -169,15 +192,25 @@ relies on a `{{DIGEST_ENTITY}}` placeholder mechanism that only the
 `llm_sim.py::_apply_digest_placeholders`) -- a real model has no such
 convention and simply free-forms its tool-call arguments. The live
 adapter has to attribute provenance to each argument *after the fact*
-(`gemini_adapter.py::_attribute_provenance`), by checking whether the
+(`gemini_adapter.py::attribute_provenance`), by checking whether the
 value showed up in the trusted task text, the digest's `summary`, or the
 digest's `entities`. This is a heuristic, not a structural guarantee, and
-it measurably under-performs the simulator's mechanism in one specific
-way: see `MEASUREMENTS.md` Part 2 and `NOTES.md` for the
-`benign_forward_entity-01` case where this exact ordering (summary
-checked before entities) caused quarantine-mode's one legitimate
-auto-clear rule to miss a value it should have caught. The fix (checking
-entities before summary, or requiring an exact rather than substring
-match) was deliberately not applied before writing down the measured
-number -- this project's rule against tuning results after seeing them
-applies to its own adapter code, not just to the red-team corpus.
+it measurably under-performed the simulator's mechanism in one specific
+way: see `MEASUREMENTS.md` Part 2 for the `benign_forward_entity-01` case
+where the original ordering (summary checked before entities) caused
+quarantine-mode's one legitimate auto-clear rule to miss a value it should
+have caught. That result was published before the fix was applied, because
+this project's rule against tuning results after seeing them applies to
+its own adapter code, not just to the red-team corpus.
+
+The fix that followed is in two parts, and the second part is the one
+worth reading. Reordering the attribution by evidence strength is
+straightforward. But attribution is a statement about where a value came
+from, and the auto-clear also needs a statement about whether the operator
+asked for it -- which the simulator got for free, since only a trusted
+directive can write `{{DIGEST_ENTITY}}`, and the live adapter had no
+equivalent. Reordering alone moved one attack case from being blocked by
+the taint rule to being blocked only by the approval gate, with no change
+in attack success rate to signal it. The opt-in check in `run_sandboxed`
+restores the missing half, and is enforced identically for both brains
+rather than reimplemented per-adapter.
