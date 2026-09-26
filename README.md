@@ -18,16 +18,32 @@ call that can only return a fixed schema.
 
 ## Numbers
 
-Against a 50 case corpus run on real Gemini models, the undefended agent was
-tricked 74% of the time on gemini-2.5-flash-lite and 68% on gemini-2.5-flash.
-Behind the sandbox, neither model was tricked once.
+Against a 50 case corpus run on four real Gemini models, the undefended agent
+was tricked 74% of the time on gemini-2.5-flash-lite, 68% on gemini-2.5-flash,
+18% on gemini-3.5-flash-lite and 4% on gemini-3.6-flash. Behind the sandbox,
+none of the four was tricked once. Susceptibility drops sharply across model
+generations but does not follow price or tier within one, and the category that
+survives on every model is egress allowlist probing, which is not really a
+prompt injection problem at all.
 
 That is not free. Blocking every untrusted-to-privileged flow also blocks real
 work, like reading a customer email and forwarding a summary. Measured on 30
 benign tasks, strict enforcement rejects 33% of them. Routing the decision
-through a human approval gate brings that to 7%. The full breakdown, including
-a case where the quarantine path gave no benefit at all against a real model,
-is in MEASUREMENTS.md.
+through a human approval gate brings that to 0% on three of the four backends
+and 7% on the fourth, and automatically clearing schema validated extracted
+values brings it to 23%.
+
+There is also a set of twelve attacks written against these specific defenses
+rather than against prompt injection in general. One works. If an operator asks
+the agent to write to the contact named in an email, and an attacker wrote the
+email, then the attacker picked the value that gets automatically cleared. The
+schema bounds how long an extracted value can be, never what it means. That
+leaves the approval gate as the only layer in front of it, which is why
+MEASUREMENTS.md reports it rather than claiming it away.
+
+The full breakdown, including the before and after of a provenance bug that had
+made the automatic path worth nothing against a real model, is in
+MEASUREMENTS.md.
 
 ## Running it
 
@@ -44,8 +60,9 @@ simulator, so the tests and the offline corpus work with no setup. To use real
 models, run `gcloud auth application-default login` and set
 `GOOGLE_CLOUD_PROJECT`.
 
-The command line works too: `sbx redteam` runs the corpus, `sbx policy check`
-validates a policy file.
+The command line works too: `sbx redteam` runs the corpus, `sbx adaptive` runs
+the set written against these defenses, and `sbx policy check` validates a
+policy file.
 
 ## A note on the tools
 
@@ -54,5 +71,5 @@ or makes real network requests, whatever an injected payload asks for. That is
 deliberate, since the point of the app is to let people type hostile input into
 an agent that will genuinely obey it.
 
-THREAT-MODEL.md is blunt about what this does not defend against, including
-adaptive attackers who have read this code.
+THREAT-MODEL.md is blunt about what this does not defend against, including the
+parts of an adaptive attacker's job that the twelve case set does not cover.
