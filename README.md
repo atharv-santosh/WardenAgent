@@ -1,4 +1,4 @@
-# agent-sandbox
+# Warden Agent
 
 A policy layer between an LLM agent and the tools it can call.
 
